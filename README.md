@@ -1,8 +1,3 @@
----
-title: Thouscif
-
----
-
 # Thouscif
 
 Prototipo de vault de cifrado de archivos sensibles.
@@ -71,7 +66,7 @@ La aplicación está dividida en estos módulos:
 1. Arranque de la app, `GUI.py` crea `menu()`.
 2. Usuario pulsa “Iniciar sesión”, `GUI.py` llama a `login.inicioDeSesion()`.
 4. Si las credenciales son válidas, `GUI.py` abre `ventana_2fa()` y espera código.
-5. Código correcto → cierra `ventana_2fa`, destruye `menu()` y abre `GUI_app.py()`.
+5. Código correcto, cierra `ventana_2fa`, destruye `menu()` y abre `GUI_app.py()`.
 6. Desde el Dashboard el usuario puede cifrar/descifrar archivos; `GUI_app` emite señales de progreso que `GUI.py` solo enruta (no procesa lógica de cifrado).
 
 **GUI_app.py**
@@ -81,13 +76,115 @@ La aplicación está dividida en estos módulos:
 - Llama al módulo de cifrado:
   1. `cifrar_archivos(ruta)`
   2. `descifrar_archivo(ruta_encriptada)`
-- Actualiza la base de datos (`db/database.py`) con metadatos del archivo cifrado/descifrado.
-- Muestra barras de progreso y notificaciones (“archivo cifrado con éxito”, “clave incorrecta”, etc.).
+- Actualiza la base de datos (`login.databaseVault.py`) con metadatos del archivo cifrado/descifrado.
+- Muestra notificaciones (“archivo cifrado con éxito”, “clave incorrecta”, etc.).
 
 **Flujo de interacción:**
 1. Recibe usuario, contraseña y salt desde `GUI.py` al instanciarse.
-2. Usuario pulsa Cifrar archivo → `QFileDialog` devuelve ruta, llama `vault_app.cifrar_archivos.Cifrador()`, guarda resultado en `/archivos/`, inserta registro en `db.archivos` y `db.historial_archivos`, muestra notificación.
+2. Usuario pulsa Cifrar archivo, `QFileDialog` devuelve ruta, llama `vault_app.cifrar_archivos.Cifrador()`, guarda resultado en `/archivos/`, inserta registro en `db.archivos` y `db.historial_archivos`, muestra notificación.
 3. Usuario pulsa Descifrar archivo, selecciona fichero, llama `vault_app.descifrar_archivos.Descifrador()`, escribe archivo temporal, muestra mensaje de éxito y la ruta de salida.
+#### 4.2.3 `login/`
+
+**registro.py**
+
+**Responsabilidad:**
+- Valida que el usuario no exista en la base de datos.
+- Comprueba la fortaleza de la contraseña llamando a `login/seguridad.py`.
+- Genera `salt` y calcula `password_hash` (Argon2).
+- Genera `totp_secret`.
+- Genera un `salt` para la clave maestra.
+- Inserta el nuevo usuario, su `totp_secret` y el `salt` en `login.databaseVault.contraseñas()`.
+- Devuelve objeto `Usuario` inicializado o mensaje de error.
+
+**Flujo de interacción:**
+1. `GUI/GUI.py` llama a `login.registro(usuario, contraseña)`.
+2. `registro` consulta en la base de datos si existe el usuario.
+3. Si OK, llama a `seguridad.hash()`.
+4. `hash + salt` se inserta en `db.contraseñas`.
+5. Devuelve `Usuario` y señal de registro exitoso a la GUI.
+
+
+
+**login.py**
+
+**Responsabilidad:**
+- Recibe usuario y contraseña.
+- Consulta `db.contraseñas` y obtiene hash + salt.
+- Verifica con Argon2.
+- Revisa el contador de intentos fallidos y bloqueo temporal.
+- Indica paso 2FA.
+- Devuelve `Usuario` o error.
+
+**Flujo de interacción:**
+1. `GUI/GUI.py` llama a `login.loginUsuario(usuario, contraseña)`.
+2. `login` verifica; si las credenciales no son válidas, incrementa `intentos_fallidos` en `login.databaseVault.contraseñas` y devuelve error.
+3. Si OK, devuelve estado pendiente de 2FA (GUI muestra ventana 2FA).
+
+
+**seguridad.py**
+
+**Responsabilidades:**
+- `contraseña_segura(contraseña)`: comprueba longitud, mayúsculas, minúsculas, números y símbolos.
+- `capa_2fa_registro(usuario)`: compatible con Google Authenticator.
+- `verify_2fa(codigo)`: comprueba el código 2FA.
+- Funciones auxiliares para generación de `salts` y hashing.
+
+**Flujo de interacción:**
+- Llamado por `registro.py` y `login.py` para validaciones.
+- No interactúa directamente con la base de datos.
+
+
+**Usuarios.py**
+
+**Responsabilidades:**
+- Define la clase `UsuarioSesion` con atributos `id` y nombre de usuario.
+- Almacena en memoria la sesión actual para evitar accesos repetidos a la base de datos.
+
+**Flujo de interacción:**
+- Instanciado por `registro.py` y `login.py` al crear/autenticar un usuario.
+- Pasado a `GUI_app` para operaciones (cifrar/descifrar).
+- Vive en memoria hasta que el usuario cierra sesión (se destruye la referencia).
+
+Todos los accesos a la base de datos se realizan a través de `login/databaseVault.py`; ninguno de estos módulos ejecuta SQL directamente.
+
+
+#### 4.2.4 `vault_app/`
+
+**cifrar_archivos.py**
+
+**Responsabilidad:**
+- Función `cifrar_archivo(ruta_original, contraseña)`.
+- Genera una clave de archivo aleatoria (256 bits).
+- Deriva clave de sesión con PBKDF2-HMAC-SHA256 y el `salt` del usuario.
+- Cifra el archivo en bloques usando AES-GCM.
+- Cifra la clave de archivo con la clave maestra del usuario y la guarda en la base de datos.
+- Devuelve la ruta del archivo resultante.
+- Registra la acción en `db.log`.
+
+**Flujo de interacción:**
+1. Llamado por `GUI_app`.
+2. Genera clave de archivo, cifra contenido y escribe `archivo.enc`.
+3. Inserta registro en `db.archivos` (nombre, ruta, clave_cifrada, usuario_id, fecha_subida).
+4. Devuelve a `GUI_app` y muestra notificación de éxito.
+
+
+**descifrar_archivos.py**
+
+**Responsabilidad:**
+- Función `descifrar_archivo(ruta_vault)`.
+- Lee metadatos (clave cifrada).
+- Descifra la clave de archivo con la clave maestra.
+- Descifra los datos con AES-GCM (usando IV y tag almacenados).
+- Escribe el archivo original en una ruta temporal.
+- Registra la acción en `login.databaseVault.logs`.
+
+**Flujo de interacción:**
+1. Llamado por `GUI_app`.
+2. Obtiene clave cifrada desde la base de datos.
+3. Descifra la clave del archivo con clave maestra.
+4. Descifra el contenido y lo guarda en un archivo plano.
+5. Devuelve ruta de salida a `GUI_app` y muestra mensaje de éxito.
+
 
 ### 4.3 Diagrama de flujo general
 Este es el diagrama del flujo principal de la aplicación:
