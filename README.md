@@ -92,39 +92,40 @@ La aplicación está dividida en estos módulos:
 ### 4.3 Diagrama de flujo general
 Este es el diagrama del flujo principal de la aplicación:
 
-(Añadir diagrama)
+![Diagrama de flujo general](img/Diagrama_de_flujo_aplicacion.png)
 
 ### 4.4 Diagrama de flujo de autenticación
 Este es el diagrama del flujo de autenticación de la aplicación:
 
-(Añadir diagrama)
+![Diagrama de flujo autenticación](img/Diagram_de_flujo_de_autenticacion.png)
 
 ### 4.5 Gestión de cifrado
 La gestión de cifrado de esta aplicación se puede explicar en una jerarquía de claves. 
 
 Este diagrama representa el funcionamiento de esta jerarquía:
 
-(Añadir diagrama de jerarquía de claves)
+![Diagrama de flujo jerarquia](img/Jerarquia_de_claves.png)
 
 ## 5. Base de datos
 ### 5.1 Descripción general
 La base de datos que utiliza la aplicación es una base SQLite local, creada para almacenar la información del usuario, contraseñas, claves cifradas y registros de uso. Se divide en varias tablas que representan las distintas funcionalidades críticas del sistema.
 
 ### 5.2 Diagrama de la base de datos
-(Añadir aquí el diagrama generado, por ejemplo con DBML o dbdiagram.io)
+![Diagrama de la base de datos](img/Diagrama_base_de_datos.png)
 
 ### 5.3 Tablas
 A continuación se describen las tablas más relevantes:
 
 **contraseñas:**
 Contiene los datos necesarios del usuario registrado.
+![Diagrama de la base de datos](img/Diagrama_base_de_datos-contrasenas.png)
 
 **archivos:**
 Almacena la información de archivos cifrados por el usuario.
-
+![Diagrama de la base de datos](img/Diagrama_base_de_datos-archivos.png)
 **logs:**
 Registra acciones del usuario dentro del sistema.
-
+![Diagrama de la base de datos](img/Diagrama_base_de_datos-logs.png)
 ### 5.4 Relaciones
 Todas las tablas están relacionadas a la tabla de contraseñas, comparten el ID del usuario a través de una clave foránea.
 
